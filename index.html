@@ -212,6 +212,14 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
 .sums .big b{color:var(--down)}
 .sums .big.done b{color:var(--up)}
 .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.cash{border:1.5px dashed var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.cash > span{display:block;font-size:.85rem;color:var(--muted);font-weight:700;margin-bottom:6px}
+.cash input{width:100%;color:var(--text);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-family:var(--font-d);font-weight:800;font-size:1.25rem}
+.cash .bills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cash .bills button{border:1.5px solid var(--line);background:var(--lime-soft);color:var(--text);border-radius:999px;padding:5px 11px;font-weight:700;font-size:.9rem}
+.cash .res{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;font-family:var(--font-d);font-weight:800;font-size:1.3rem}
+.cash .res b{color:var(--up)}
+.cash .res.short b{color:var(--down)}
 .subt{font-weight:700;color:var(--muted);font-size:.88rem;margin:6px 0 4px}
 .pay{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);gap:10px}
 .pay .del{background:none;border:0;color:var(--muted);text-decoration:underline;font-size:.85rem}
@@ -364,6 +372,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
         <div><span>Abonado</span><b class="num" id="oPaid"></b></div>
         <div class="big" id="oPendRow"><span id="oPendLbl">Por cobrar</span><b class="num" id="oPend"></b></div>
       </div>
+      <div id="oCashWrap"><div class="cash" id="oCash"><span>💵 Calcular vuelto (pago en efectivo)</span><input class="num" inputmode="numeric" autocomplete="off" placeholder="¿Con cuánto paga?"><div class="bills"></div><div class="res" hidden><span></span><b class="num"></b></div></div></div>
       <div class="acts" id="oActs">
         <button class="btn ok" type="button" id="oPayAll">Marcar pagado</button>
         <button class="btn ghost" type="button" id="oPay">Registrar abono</button>
@@ -387,6 +396,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
       <div class="sums"><div class="big"><span>Debe en total</span><b class="num" id="acDebt"></b></div></div>
       <p class="subt">Pedidos pendientes (toca uno para verlo en su día)</p>
       <div id="acOrders"></div>
+      <div style="margin-top:14px"><div class="cash" id="acCash"><span>💵 Calcular vuelto (pago en efectivo)</span><input class="num" inputmode="numeric" autocomplete="off" placeholder="¿Con cuánto paga?"><div class="bills"></div><div class="res" hidden><span></span><b class="num"></b></div></div></div>
       <div class="acts" style="margin-top:14px">
         <button class="btn ok" type="button" id="acPayAll">Cobrar todo</button>
         <button class="btn ghost" type="button" id="acShare">Enviar resumen</button>
@@ -416,6 +426,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
     <div class="sheet-body">
       <label class="field"><span>Monto</span><input id="pAmount" class="num" inputmode="numeric" autocomplete="off" style="font-family:var(--font-d);font-weight:800;font-size:1.6rem"></label>
       <label class="field"><span>Fecha</span><input id="pDate" type="date"></label>
+      <div class="cash" id="pCash"><span>💵 Calcular vuelto (pago en efectivo)</span><input class="num" inputmode="numeric" autocomplete="off" placeholder="¿Con cuánto paga?"><div class="bills"></div><div class="res" hidden><span></span><b class="num"></b></div></div>
       <p class="err" id="pErr"></p>
       <button class="btn primary wide" type="button" id="pSave">Guardar abono</button>
     </div>
@@ -932,7 +943,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
       w.appendChild(el("div","osum",(x.orders.length===1?"1 pedido":x.orders.length+" pedidos")+" · desde el "+niceDate(x.orders[0].date)));
       var r=el("div","oright"); r.appendChild(el("b","num owe",money(x.debt)));
       b.appendChild(bd); b.appendChild(w); b.appendChild(r);
-      b.addEventListener("click", function(){ curClient=x.key; fillClient(); $("dlgClient").showModal(); });
+      b.addEventListener("click", function(){ curClient=x.key; fillClient(); acCash.reset(); $("dlgClient").showModal(); });
       box.appendChild(b);
     });
     if($("dlgClient").open) fillClient();
@@ -961,6 +972,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
       box.appendChild(b);
     });
   }
+  var acCash=cashBox("acCash", function(){ var x=clientGroup(); return x ? x.debt : 0; });
   $("acPayAll").addEventListener("click", function(){
     var x=clientGroup(); if(!x) return;
     if(!confirm("¿Registrar que "+x.name+" pagó todo lo que debe ("+money(x.debt)+")?")) return;
@@ -1240,10 +1252,41 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
     deliver(doc, "Informe de ventas "+fname+".pdf");
   }
 
+  // ---------- Vuelto ----------
+  // Calculadora de vuelto: muestra cuánto devolver según el billete con que pagan
+  function cashBox(id, getAmount){
+    var box=$(id), inp=box.querySelector("input"), bills=box.querySelector(".bills"), res=box.querySelector(".res");
+    moneyInput(inp);
+    function calc(){
+      var amt=getAmount(), got=digits(inp.value);
+      if(!got || !amt){ res.hidden=true; return; }
+      res.hidden=false;
+      var diff=got-amt;
+      res.className="res"+(diff<0?" short":"");
+      res.firstChild.textContent= diff<0 ? "Faltan" : "Vuelto";
+      res.lastChild.textContent= money(Math.abs(diff));
+    }
+    inp.addEventListener("input", calc);
+    function reset(){ inp.value=""; refresh(); }
+    function refresh(){
+      bills.textContent=""; calc();
+      var amt=getAmount(); if(!amt) return;
+      var opts=[], c=[Math.ceil(amt/1000)*1000, Math.ceil(amt/5000)*5000, 10000, 20000, 50000];
+      c.forEach(function(v){ if(v>amt && opts.indexOf(v)<0 && opts.length<4) opts.push(v); });
+      opts.forEach(function(v){
+        var b=el("button",null,money(v)); b.type="button";
+        b.addEventListener("click", function(){ inp.value=money(v); calc(); });
+        bills.appendChild(b);
+      });
+    }
+    return {reset:reset, refresh:refresh, calc:calc};
+  }
+
   // ---------- Detalle del pedido ----------
   var cur=null; // {date,id}
   function curOrder(){ return cur && days[cur.date] ? days[cur.date][cur.id] : null; }
-  function openOrder(o){ cur={date:o.date,id:o.id}; fillOrder(); $("dlgOrder").showModal(); }
+  function openOrder(o){ cur={date:o.date,id:o.id}; fillOrder(); oCash.reset(); $("dlgOrder").showModal(); }
+  var oCash=cashBox("oCash", function(){ var o=curOrder(); return o ? oPend(o) : 0; });
   function refreshOrderDialog(){
     if(!$("dlgOrder").open) return;
     if(!curOrder()){ if(days[cur.date]) $("dlgOrder").close(); return; }
@@ -1263,7 +1306,7 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
     $("oPend").textContent= pend>0 ? money(pend) : "Pagado";
     $("oPendLbl").textContent= pend>0 ? "Por cobrar" : "Estado";
     $("oPendRow").className="big"+(pend>0?"":" done");
-    $("oActs").hidden = pend<=0;
+    $("oActs").hidden = pend<=0; $("oCashWrap").hidden = pend<=0; oCash.calc();
     $("oDoneTxt").textContent = o.done ? "🛵 Entregado"+(o.doneAt ? " a las "+hour(o.doneAt) : "") : "👩‍🍳 En preparación";
     $("oDoneBtn").textContent = o.done ? "Volver a preparación" : "Marcar entregado";
     var ps=$("oPays"); ps.textContent="";
@@ -1289,9 +1332,11 @@ dialog::backdrop{background:rgba(14,30,40,.5)}
     $("pTitle").textContent="Abono de "+o.client;
     $("pAmount").value=""; $("pAmount").placeholder="Debe "+money(oPend(o));
     $("pDate").value=today(); $("pErr").textContent="";
-    $("dlgPay").showModal(); setTimeout(function(){ $("pAmount").focus(); },60);
+    pCash.reset(); $("dlgPay").showModal(); setTimeout(function(){ $("pAmount").focus(); },60);
   });
   moneyInput($("pAmount"));
+  var pCash=cashBox("pCash", function(){ return digits($("pAmount").value); });
+  $("pAmount").addEventListener("input", function(){ pCash.refresh(); });
   $("pSave").addEventListener("click", function(){
     var o=curOrder(); if(!o){ $("dlgPay").close(); return; }
     var a=digits($("pAmount").value), pend=oPend(o);
