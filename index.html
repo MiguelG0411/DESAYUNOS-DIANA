@@ -370,8 +370,6 @@ header.top{flex-wrap:wrap;justify-content:center}
       <button class="btn lime" type="button" id="addProd">+ Agregar producto</button>
     </div>
     <div id="carta"></div>
-    <button class="linkbtn" type="button" id="impBtn" style="margin:18px 0 0">Subir datos de un respaldo (archivo)</button>
-    <input type="file" id="impFile" accept=".json,application/json" hidden>
     <button class="linkbtn" type="button" id="expBtn" style="margin:18px 0 0">Descargar respaldo de todos los datos</button>
   </section>
 </main>
@@ -787,7 +785,6 @@ header.top{flex-wrap:wrap;justify-content:center}
         if(j.menu && !c.outbox.some(function(op){ return op.action==="setMenu"; })){ c.menu=j.menu; menu=clone(j.menu); }
         c.since=j.now; persist(); rebuild(); render(); setSync("ok");
         fresh.sort(function(a,b){ return a.num-b.num; }); announce(fresh);
-        if(first) offerImport();
       }).catch(function(e){
         pulling=false; setSync("err");
         if(/Clave/.test(String(e && e.message))) logout("La clave no coincide. Vuelve a entrar.");
@@ -806,12 +803,6 @@ header.top{flex-wrap:wrap;justify-content:center}
       return ops;
     }
     sheetStore.flush=flush; sheetStore.pull=pull;
-    sheetStore.importData=function(orders, m){
-      setSync("busy");
-      return apiPost({action:"import", orders:orders, menu:m}).then(function(r){ c.since=0; pull(); return r.added; })
-        .catch(function(e){ setSync("err"); throw e; });
-    };
-    sheetStore.isEmpty=function(){ return !Object.keys(c.orders).length && !(c.menu.items||[]).length; };
     rebuild();
     setTimeout(flush, 0);
     return {
@@ -827,36 +818,6 @@ header.top{flex-wrap:wrap;justify-content:center}
   setInterval(function(){ if(USER && store && sheetMode() && document.visibilityState==="visible") sheetStore.flush(); }, 8000);
   document.addEventListener("visibilitychange", function(){ if(document.visibilityState==="visible" && USER && store && sheetMode()) sheetStore.flush(); });
   window.addEventListener("online", function(){ if(USER && store && sheetMode()) sheetStore.flush(); });
-
-  // Datos que quedaron guardados en este teléfono con la versión anterior de la app
-  function oldLocalData(){
-    try{ var a=JSON.parse(localStorage.getItem(LS)||"null"); if(a && a.orders && Object.keys(a.orders).length) return a; }catch(e){}
-    return null;
-  }
-  var importOffered=false;
-  function offerImport(){
-    if(importOffered) return; importOffered=true;
-    var old=oldLocalData(); if(!old || !sheetStore.isEmpty()) return;
-    var n=Object.keys(old.orders).length;
-    if(!confirm("Este teléfono tiene "+n+" pedidos y la carta de la versión anterior. ¿Subirlos a la planilla para que los vean todos?")) return;
-    doImport(Object.keys(old.orders).map(function(k){ return old.orders[k]; }), old.menu);
-  }
-  function doImport(orders, m){
-    flash("Subiendo datos a la planilla…");
-    sheetStore.importData(orders, m).then(function(added){ flash(added+" pedidos subidos a la planilla"); })
-      .catch(function(){ flash("No se pudieron subir los datos. Revisa tu internet."); });
-  }
-  $("impBtn").addEventListener("click", function(){ $("impFile").click(); });
-  $("impFile").addEventListener("change", function(){
-    var f=this.files && this.files[0]; this.value=""; if(!f) return;
-    f.text().then(function(t){
-      var d=JSON.parse(t), orders=d.orders||[];
-      if(!Array.isArray(orders)) orders=Object.keys(orders).map(function(k){ return orders[k]; });
-      if(!orders.length && !(d.menu && d.menu.items && d.menu.items.length)){ flash("El archivo no tiene datos"); return; }
-      if(!confirm("¿Subir "+orders.length+" pedidos"+(d.menu&&d.menu.items&&d.menu.items.length ? " y la carta" : "")+" a la planilla? Los que ya estén no se repiten.")) return;
-      doImport(orders, d.menu);
-    }).catch(function(){ flash("No se pudo leer el archivo"); });
-  });
 
   // ---------- Entrar ----------
   function showLogin(msg){
@@ -904,7 +865,6 @@ header.top{flex-wrap:wrap;justify-content:center}
   function start(s){ store=s; store.watch([sel, addDays(sel,-1)]); }
   function init(){
     render();
-    $("impBtn").hidden=!sheetMode();
     if(sheetMode()){ if(USER){ paintWho(); start(sheetStore()); } else showLogin(); return; }
     if(!window.claude || typeof window.claude.use!=="function"){ start(localStore()); return; }
     Promise.all([window.claude.use("db"), window.claude.use("user")]).then(function(r){
