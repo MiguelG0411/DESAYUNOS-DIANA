@@ -715,7 +715,7 @@ header.top{flex-wrap:wrap;justify-content:center}
     var c; try{ c=JSON.parse(localStorage.getItem(SK)||"null"); }catch(e){}
     if(!c) c={orders:{}, menu:{items:[]}, since:0, outbox:[]};
     if(!c.outbox) c.outbox=[];
-    var watched=[], flushing=false, pulling=false;
+    var watched=[], flushing=false, pulling=false, seedTried=false;
     menu=clone(c.menu||{items:[]});
     function persist(){ try{ localStorage.setItem(SK, JSON.stringify(c)); }catch(e){ flash("No se pudo guardar en este teléfono"); } }
     function rebuildClients(){
@@ -783,6 +783,11 @@ header.top{flex-wrap:wrap;justify-content:center}
           c.orders[o.id]=o;
         });
         if(j.menu && !c.outbox.some(function(op){ return op.action==="setMenu"; })){ c.menu=j.menu; menu=clone(j.menu); }
+        // Si la planilla no tiene carta, se carga la carta original (la planilla solo la escribe si sigue vacía)
+        if(j.menu && !(j.menu.items||[]).length && !seedTried){
+          seedTried=true;
+          apiPost({action:"import", orders:[], menu:clone(SEED_MENU)}).then(function(){ c.since=0; pull(); }).catch(function(){ seedTried=false; });
+        }
         c.since=j.now; persist(); rebuild(); render(); setSync("ok");
         fresh.sort(function(a,b){ return a.num-b.num; }); announce(fresh);
       }).catch(function(e){
